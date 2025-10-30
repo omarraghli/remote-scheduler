@@ -14,11 +14,11 @@ public class Main {
     static final String[] DAYS = {"Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi"};
     static final int BASE_SLOTS = 4;
     static final int REMOTES_PER_PERSON = 3;
-    static final int EXTRA_DAY = 2; // Mercredi
+    static final int EXTRA_DAY = 2; // Mercredi gets an extra slot
     static final Random random = new Random();
 
-    // ✅ Multiple holidays supported
-    static final Set<String> HOLIDAYS = Set.of("Lundi"); // Add any days you want to skip
+    // Days marked as holidays will have zero available slots
+    static final Set<String> HOLIDAYS = Set.of("Lundi");
 
     static class Result {
         int[] schedule;
@@ -27,20 +27,20 @@ public class Main {
     }
 
     public static void main(String[] args) throws Exception {
-        System.out.println("🎲 Generating weekly remote schedule...");
+        System.out.println("Initializing remote schedule generator...");
 
-        // Shuffle people order for randomness
+        // Randomize assignment order to ensure fairness
         List<String> peopleList = new ArrayList<>(Arrays.asList(PEOPLE_ORIGINAL));
         Collections.shuffle(peopleList, random);
         String[] PEOPLE = peopleList.toArray(new String[0]);
 
-        // Example: define who returns from vacation on which day
+        // Define returning from vacation constraints (person -> day they return)
         Map<String, String> vacationReturns = Map.of(
 //                "Oussama", "Lundi",
 //                "Sara", "Jeudi"
         );
 
-        // Convert to a map of person -> set of forbidden day indices
+        // Convert vacation returns to forbidden day indices per person
         Map<String, Set<Integer>> forbiddenDays = new HashMap<>();
         for (var e : vacationReturns.entrySet()) {
             forbiddenDays
@@ -48,28 +48,32 @@ public class Main {
                     .add(dayIndex(e.getValue()));
         }
 
-        System.out.println("📅 Mercredi has 5 slots this week.");
-        if (!HOLIDAYS.isEmpty()) System.out.println("🚫 Jours fériés: " + String.join(", ", HOLIDAYS));
+        System.out.println("Configuration: Mercredi has 5 available slots this week");
+        if (!HOLIDAYS.isEmpty()) {
+            System.out.println("Holidays configured: " + String.join(", ", HOLIDAYS));
+        }
 
         Result res = solveRandom(PEOPLE, forbiddenDays);
         if (res == null) {
-            System.out.println("❌ No valid schedule found. Try again or relax constraints.");
+            System.err.println("ERROR: Unable to generate valid schedule with current constraints");
+            System.err.println("Consider adjusting vacation dates or remote quotas");
             return;
         }
 
         printSchedule(PEOPLE, res.schedule);
         exportToExcel(PEOPLE, res.schedule);
-        System.out.println("✅ Excel file created: remote_schedule.xlsx");
+        System.out.println("Schedule successfully exported to: remote_schedule.xlsx");
     }
 
     static Result solveRandom(String[] PEOPLE, Map<String, Set<Integer>> forbiddenDays) {
         int[] slotsPerDay = new int[DAYS.length];
         Arrays.fill(slotsPerDay, BASE_SLOTS);
-        slotsPerDay[EXTRA_DAY] = BASE_SLOTS + 1; // Mercredi = 5 slots
+        slotsPerDay[EXTRA_DAY] = BASE_SLOTS + 1;
 
-        // ✅ Skip holidays
+        // Zero out slots for holidays
         HOLIDAYS.forEach(day -> slotsPerDay[dayIndex(day)] = 0);
 
+        // Pre-generate all valid person combinations for each day
         List<List<Integer>> dayChoices = new ArrayList<>();
         for (int d = 0; d < DAYS.length; d++) {
             if (slotsPerDay[d] == 0) {
@@ -95,13 +99,14 @@ public class Main {
                                 int[] schedule, List<List<Integer>> dayChoices,
                                 Map<String, Set<Integer>> forbiddenDays, Result[] best,
                                 int[] slotsPerDay) {
+        // Base case: validate that everyone has exactly 3 remote days
         if (dayIndex == DAYS.length) {
             for (int c : counts) if (c != REMOTES_PER_PERSON) return;
             best[0] = new Result(schedule.clone(), random.nextDouble());
             return;
         }
 
-        // ✅ Skip jour férié
+        // Skip processing if current day is a holiday
         if (HOLIDAYS.contains(DAYS[dayIndex])) {
             schedule[dayIndex] = 0;
             backtrackRandom(PEOPLE, dayIndex + 1, counts, consec, schedule, dayChoices, forbiddenDays, best, slotsPerDay);
@@ -114,11 +119,14 @@ public class Main {
         for (int choice : shuffledChoices) {
             boolean invalid = false;
 
+            // Check constraints for each person in this combination
             for (int p = 0; p < PEOPLE.length; p++) {
                 boolean isRemote = ((choice >> p) & 1) == 1;
                 if (isRemote) {
+                    // No more than 2 consecutive remote days
                     if (consec[p] >= 2 || counts[p] >= REMOTES_PER_PERSON) { invalid = true; break; }
 
+                    // Check vacation constraints
                     Set<Integer> forbidden = forbiddenDays.get(PEOPLE[p]);
                     if (forbidden != null && forbidden.contains(dayIndex)) { invalid = true; break; }
                 }
@@ -126,6 +134,7 @@ public class Main {
 
             if (invalid) continue;
 
+            // Update tracking arrays for this choice
             int[] newCounts = counts.clone();
             int[] newConsec = consec.clone();
             for (int p = 0; p < PEOPLE.length; p++) {
@@ -137,10 +146,11 @@ public class Main {
 
             schedule[dayIndex] = choice;
             backtrackRandom(PEOPLE, dayIndex + 1, newCounts, newConsec, schedule, dayChoices, forbiddenDays, best, slotsPerDay);
-            if (best[0] != null) return; // stop at first valid random solution
+            if (best[0] != null) return; // Stop at first valid solution
         }
     }
 
+    // Generate all k-combinations from n elements as bitmasks
     static List<Integer> generateCombinations(int n, int k) {
         List<Integer> res = new ArrayList<>();
         combine(0, 0, n, k, res);
@@ -161,10 +171,10 @@ public class Main {
     }
 
     static void printSchedule(String[] PEOPLE, int[] schedule) {
-        System.out.println("\n📋 Weekly Schedule:");
+        System.out.println("\nGenerated Weekly Schedule:");
         for (int d = 0; d < DAYS.length; d++) {
             if (HOLIDAYS.contains(DAYS[d])) {
-                System.out.println(" " + DAYS[d] + ": ❌ Jour férié");
+                System.out.println(" " + DAYS[d] + ": Holiday - No remote work");
                 continue;
             }
             int mask = schedule[d];
@@ -179,17 +189,19 @@ public class Main {
         Workbook wb = new XSSFWorkbook();
         Sheet sheet = wb.createSheet("Remote Schedule");
 
+        // Create header row with day labels
         Row header = sheet.createRow(0);
         for (int i = 0; i < DAYS.length; i++) {
             Cell cell = header.createCell(i);
             String dayLabel = DAYS[i];
-            if (HOLIDAYS.contains(DAYS[i])) dayLabel += " (Jour férié)";
+            if (HOLIDAYS.contains(DAYS[i])) dayLabel += " (Holiday)";
             else if (i == EXTRA_DAY) dayLabel += " (5 slots)";
             cell.setCellValue(dayLabel);
         }
 
+        // Fill in remote workers for each day
         for (int d = 0; d < DAYS.length; d++) {
-            if (HOLIDAYS.contains(DAYS[d])) continue; // skip filling
+            if (HOLIDAYS.contains(DAYS[d])) continue;
             int mask = schedule[d];
             List<String> remotes = new ArrayList<>();
             for (int p = 0; p < PEOPLE.length; p++)
