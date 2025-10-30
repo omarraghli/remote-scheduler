@@ -189,15 +189,10 @@ static final String[] DAYS = {"Lundi", "Mardi", "Mercredi", "Jeudi", "Vendredi",
 
 Pull requests are welcome! Areas for improvement:
 - Add weighted preferences for specific days
-- Implement solution quality scoring
-- Support for partial remote days
 - Web interface for easier configuration
 - Multi-week planning with rotation fairness
-
-## License
-
-[Add your license here]
+- Add a scheduled job, so that every it will run automatically every Thursday and send the resulted .xls file to all team member email
 
 ## Author
-
-Created to solve weekly remote schedule assignment challenges for the mobility team.
+Omar Raghli AKA: Sajitsu ;D
+Created with love to solve weekly remote schedule assignment challenges for the mobility team.
